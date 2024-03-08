@@ -8,7 +8,6 @@
 static char doc[] = "Manage core scheduling cookies for tasks";
 
 static struct argp_option options[] = {
-	{ 0, 0, 0, 0, "Other", -1 },
 	{ 0, 0, 0, 0, "Getting core scheduling cookies", 0 },
 	{ "get", 'g', "PID", 0, "get the core scheduling cookie of pid", 0 },
 	{ "gettype", 0, "TYPE", 0,
@@ -28,7 +27,7 @@ static struct argp_option options[] = {
 	{ "to", 't', "PID", 0, "pid to push the core schedling cookie to", 2 },
 	{ "totype", 0, "TYPE", 0,
 	  "type of the 'to' pid. Can be one of the following: pid, tgid or pgid. Defaults to pgid.",
-	  2 }
+	  2 },
 };
 
 typedef enum {
@@ -48,9 +47,38 @@ struct args {
 	core_sched_type_t to_type;
 };
 
+pid_t parse_pid(char *str)
+{
+	const int base = 10;
+	char *tailptr = NULL;
+
+	pid_t pid = strtol(str, &tailptr, base);
+
+	if (*tailptr == '\0' && tailptr != str) {
+		return pid;
+	} else {
+		fprintf(stderr, "Failed to parse pid %s\n", str);
+		exit(1);
+	}
+}
+
 error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
+	struct args *arguments = state->input;
+
 	switch (key) {
+	case 'g':
+		arguments->get_pid = parse_pid(arg);
+		break;
+	case 'n':
+		arguments->new_pid = parse_pid(arg);
+		break;
+	case 'f':
+		arguments->from_pid = parse_pid(arg);
+		break;
+	case 't':
+		arguments->from_pid = parse_pid(arg);
+		break;
 	default:
 		return ARGP_ERR_UNKNOWN;
 	}
@@ -62,6 +90,6 @@ int main(int argc, char *argv[argc])
 	struct args arguments = { 0 };
 	struct argp argp = { options, parse_opt, 0, doc, 0, 0, 0 };
 
-	argp_parse(&argp, argc, argv, 0, 0, 0);
+	argp_parse(&argp, argc, argv, 0, 0, &arguments);
 	exit(0);
 }
