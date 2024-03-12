@@ -59,6 +59,16 @@ unsigned long core_sched_get_cookie(struct args *args)
 	}
 }
 
+void core_sched_create_cookie(struct args *args)
+{
+	int prctl_errno = prctl(PR_SCHED_CORE, PR_SCHED_CORE_CREATE,
+				args->from_pid, args->type, 0);
+	if (prctl_errno) {
+		perror("Failed to create cookie");
+		exit(prctl_errno);
+	}
+}
+
 bool verify_arguments(struct argp_state *state, struct args *args,
 		      char **error_msg)
 {
@@ -176,6 +186,9 @@ int main(int argc, char *argv[argc])
 	case SCHED_CORE_CMD_GET:
 		cookie = core_sched_get_cookie(&arguments);
 		printf("%ld\n", cookie);
+		break;
+	case SCHED_CORE_CMD_CREATE:
+		core_sched_create_cookie(&arguments);
 		break;
 	default:
 		exit(1);
