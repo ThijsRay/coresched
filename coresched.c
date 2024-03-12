@@ -2,6 +2,7 @@
 // Licensed under the EUPL v1.2
 
 #include <argp.h>
+#include <asm-generic/errno-base.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <linux/prctl.h>
@@ -17,15 +18,12 @@ static char doc[] = "Manage core scheduling cookies for tasks";
 static struct argp_option options[7] = {
 	{ 0, 0, 0, 0, "Source PID", 1 },
 	{ "pid", 'p', "PID", 0, "source pid of the core scheduling cookie", 1 },
-	{ "type", 't', "TYPE", 0,
-	  "type of the pid. Can be one of the following: pid, tgid or pgid. Defaults to pgid.",
-	  1 },
 	{ 0, 0, 0, 0, "Destination PID for copying the core scheduling cookie",
 	  2 },
-	{ "destpid", 'd', "PID", 0, "pid to copy the core scheduling cookie to",
+	{ "dest", 'd', "PID", 0, "pid to copy the core scheduling cookie to",
 	  2 },
-	{ "desttype", 'e', "TYPE", 0,
-	  "type of the destpid. Can be one of the following: pid, tgid or pgid. Defaults to pgid.",
+	{ "type", 't', "TYPE", 0,
+	  "set the type of the pid of the destination process. Can be one of the following: pid, tgid or pgid. Defaults to pgid.",
 	  2 },
 	{ 0 }
 };
@@ -49,6 +47,19 @@ struct args {
 	core_sched_type_t to_type;
 	core_sched_cmd_t cmd;
 };
+
+unsigned long core_sched_get_cookie(struct args *args)
+{
+	unsigned long cookie = 0;
+	int prctl_errno = prctl(PR_SCHED_CORE, PR_SCHED_CORE_GET,
+				args->from_pid, SCHED_CORE_SCOPE_PID, &cookie);
+	if (prctl_errno) {
+		perror("Failed to get cookie");
+		exit(prctl_errno);
+	} else {
+		return cookie;
+	}
+}
 
 bool verify_arguments(struct argp_state *state, struct args *args,
 		      char **error_msg)
@@ -80,6 +91,9 @@ pid_t parse_pid(struct argp_state *state, char *str)
 	pid_t pid = strtol(str, &tailptr, base);
 
 	if (*tailptr == '\0' && tailptr != str) {
+		if (pid < 0) {
+			argp_error(state, "PID %d cannot be negative", pid);
+		}
 		return pid;
 	} else {
 		argp_error(state, "Failed to parse pid %s", str);
@@ -129,13 +143,10 @@ error_t parse_opt(int key, char *arg, struct argp_state *state)
 		arguments->from_pid = parse_pid(state, arg);
 		break;
 	case 't':
-		arguments->from_type = parse_core_sched_type(state, arg);
+		arguments->to_type = parse_core_sched_type(state, arg);
 		break;
 	case 'd':
 		arguments->to_pid = parse_pid(state, arg);
-		break;
-	case 'e':
-		arguments->to_type = parse_core_sched_type(state, arg);
 		break;
 	case ARGP_KEY_SUCCESS:
 		if (state->argc <= 1) {
@@ -156,11 +167,19 @@ error_t parse_opt(int key, char *arg, struct argp_state *state)
 int main(int argc, char *argv[argc])
 {
 	struct args arguments = { 0 };
-	arguments.from_type = SCHED_CORE_SCOPE_PGID;
 	arguments.to_type = SCHED_CORE_SCOPE_PGID;
 
 	struct argp argp = { options, parse_opt, args_doc, doc, 0, 0, 0 };
 
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
-	exit(0);
+
+	unsigned long cookie = 0;
+	switch (arguments.cmd) {
+	case SCHED_CORE_CMD_GET:
+		cookie = core_sched_get_cookie(&arguments);
+		printf("%ld\n", cookie);
+		break;
+	default:
+		exit(1);
+	}
 }
