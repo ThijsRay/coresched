@@ -72,12 +72,17 @@ void core_sched_create_cookie(struct args *args)
 bool verify_arguments(struct argp_state *state, struct args *args,
 		      char **error_msg)
 {
+	*error_msg = malloc(128);
+	if (!*error_msg) {
+		perror("Failed to allocate error message");
+		exit(1);
+	}
+
 	if (args->from_pid != 0) {
 		if (args->cmd == SCHED_CORE_CMD_COPY && args->to_pid == 0) {
 			char *msg =
 				"Copying a core scheduling cookie requires a destination PID\0";
 			const size_t msg_len = strlen(msg);
-			*error_msg = malloc(msg_len);
 			memcpy(*error_msg, msg, msg_len);
 			return false;
 		}
@@ -86,7 +91,6 @@ bool verify_arguments(struct argp_state *state, struct args *args,
 	char *msg =
 		"Retrieving a core scheduling cookie requires a source PID\0";
 	const size_t msg_len = strlen(msg);
-	*error_msg = malloc(msg_len);
 	memcpy(*error_msg, msg, msg_len);
 	return false;
 }
