@@ -2,6 +2,7 @@
 // Licensed under the EUPL v1.2
 
 #include <argp.h>
+#include <asm-generic/errno-base.h>
 #include <stdlib.h>
 #include <linux/prctl.h>
 #include <string.h>
@@ -53,7 +54,7 @@ struct args {
 	core_sched_type_t to_type;
 };
 
-pid_t parse_pid(char *str)
+pid_t parse_pid(char *str, struct argp_state *state)
 {
 	const int base = 10;
 	char *tailptr = NULL;
@@ -63,12 +64,12 @@ pid_t parse_pid(char *str)
 	if (*tailptr == '\0' && tailptr != str) {
 		return pid;
 	} else {
-		fprintf(stderr, "Failed to parse pid %s\n", str);
-		exit(1);
+		argp_error(state, "Failed to parse pid %s", str);
+		__builtin_unreachable();
 	}
 }
 
-core_sched_type_t parse_core_sched_type(char *str)
+core_sched_type_t parse_core_sched_type(char *str, struct argp_state *state)
 {
 	if (!strncmp(str, "pid\0", 4)) {
 		return SCHED_CORE_SCOPE_PID;
@@ -78,10 +79,10 @@ core_sched_type_t parse_core_sched_type(char *str)
 		return SCHED_CORE_SCOPE_PGID;
 	}
 
-	fprintf(stderr,
-		"'%s' is an invalid option. Must be one of pid/tgid/pgid\n",
-		str);
-	exit(1);
+	argp_error(state,
+		   "'%s' is an invalid option. Must be one of pid/tgid/pgid",
+		   str);
+	__builtin_unreachable();
 }
 
 error_t parse_opt(int key, char *arg, struct argp_state *state)
@@ -90,28 +91,31 @@ error_t parse_opt(int key, char *arg, struct argp_state *state)
 
 	switch (key) {
 	case 'g':
-		arguments->get_pid = parse_pid(arg);
+		arguments->get_pid = parse_pid(arg, state);
 		break;
 	case GETTYPE_OPT:
-		arguments->get_type = parse_core_sched_type(arg);
+		arguments->get_type = parse_core_sched_type(arg, state);
 		break;
 	case 'n':
-		arguments->new_pid = parse_pid(arg);
+		arguments->new_pid = parse_pid(arg, state);
 		break;
 	case NEWTYPE_OPT:
-		arguments->new_type = parse_core_sched_type(arg);
+		arguments->new_type = parse_core_sched_type(arg, state);
 		break;
 	case 'f':
-		arguments->from_pid = parse_pid(arg);
+		arguments->from_pid = parse_pid(arg, state);
 		break;
 	case FROMTYPE_OPT:
-		arguments->from_type = parse_core_sched_type(arg);
+		arguments->from_type = parse_core_sched_type(arg, state);
 		break;
 	case 't':
-		arguments->to_pid = parse_pid(arg);
+		arguments->to_pid = parse_pid(arg, state);
 		break;
 	case TOTYPE_OPT:
-		arguments->to_type = parse_core_sched_type(arg);
+		arguments->to_type = parse_core_sched_type(arg, state);
+		break;
+	case ARGP_KEY_NO_ARGS:
+		argp_usage(state);
 		break;
 	default:
 		return ARGP_ERR_UNKNOWN;
