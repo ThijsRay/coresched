@@ -16,15 +16,14 @@ static char args_doc[] = "get -p [PID]\n"
 static char doc[] = "Manage core scheduling cookies for tasks";
 
 static struct argp_option options[7] = {
-	{ 0, 0, 0, 0, "Source PID", 1 },
-	{ "pid", 'p', "PID", 0, "source pid of the core scheduling cookie", 1 },
-	{ 0, 0, 0, 0, "Destination PID for copying the core scheduling cookie",
-	  2 },
-	{ "dest", 'd', "PID", 0, "pid to copy the core scheduling cookie to",
-	  2 },
+	{ "pid", 'p', "PID", 0,
+	  "the PID to get or copy the core scheduling cookie from, or the PID to create the cookie for.",
+	  0 },
+	{ "dest", 'd', "PID", 0,
+	  "the PID to copy the core scheduling cookie to", 0 },
 	{ "type", 't', "TYPE", 0,
-	  "set the type of the pid of the destination process. Can be one of the following: pid, tgid or pgid. Defaults to pgid.",
-	  2 },
+	  "the type of the destination PID, or the type of the PID to create a core scheduling cookie for. Can be one of the following: pid, tgid or pgid. Defaults to pgid.",
+	  0 },
 	{ 0 }
 };
 
@@ -43,8 +42,7 @@ typedef enum {
 struct args {
 	pid_t from_pid;
 	pid_t to_pid;
-	core_sched_type_t from_type;
-	core_sched_type_t to_type;
+	core_sched_type_t type;
 	core_sched_cmd_t cmd;
 };
 
@@ -143,7 +141,7 @@ error_t parse_opt(int key, char *arg, struct argp_state *state)
 		arguments->from_pid = parse_pid(state, arg);
 		break;
 	case 't':
-		arguments->to_type = parse_core_sched_type(state, arg);
+		arguments->type = parse_core_sched_type(state, arg);
 		break;
 	case 'd':
 		arguments->to_pid = parse_pid(state, arg);
@@ -167,7 +165,7 @@ error_t parse_opt(int key, char *arg, struct argp_state *state)
 int main(int argc, char *argv[argc])
 {
 	struct args arguments = { 0 };
-	arguments.to_type = SCHED_CORE_SCOPE_PGID;
+	arguments.type = SCHED_CORE_SCOPE_PGID;
 
 	struct argp argp = { options, parse_opt, args_doc, doc, 0, 0, 0 };
 
