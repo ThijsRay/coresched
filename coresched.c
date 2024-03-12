@@ -2,12 +2,14 @@
 // Licensed under the EUPL v1.2
 
 #include <argp.h>
-#include <asm-generic/errno-base.h>
 #include <assert.h>
 #include <stdlib.h>
-#include <linux/prctl.h>
+#include <sys/prctl.h>
 #include <string.h>
 #include <stdbool.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <error.h>
 
 static char args_doc[] = "get -p [PID]\n"
 			 "create -p [PID]\n"
@@ -52,11 +54,10 @@ unsigned long core_sched_get_cookie(struct args *args)
 	int prctl_errno = prctl(PR_SCHED_CORE, PR_SCHED_CORE_GET,
 				args->from_pid, SCHED_CORE_SCOPE_PID, &cookie);
 	if (prctl_errno) {
-		perror("Failed to get cookie");
-		exit(prctl_errno);
-	} else {
-		return cookie;
+		error(prctl_errno, -prctl_errno,
+		      "Failed to get cookie from PID %d", args->from_pid);
 	}
+	return cookie;
 }
 
 void core_sched_create_cookie(struct args *args)
@@ -64,18 +65,59 @@ void core_sched_create_cookie(struct args *args)
 	int prctl_errno = prctl(PR_SCHED_CORE, PR_SCHED_CORE_CREATE,
 				args->from_pid, args->type, 0);
 	if (prctl_errno) {
-		perror("Failed to create cookie");
-		exit(prctl_errno);
+		error(prctl_errno, -prctl_errno,
+		      "Failed to create cookie for PID %d", args->from_pid);
 	}
 }
 
-bool verify_arguments(struct argp_state *state, struct args *args,
-		      char **error_msg)
+void core_sched_pull_cookie(pid_t from)
+{
+	int prctl_errno = prctl(PR_SCHED_CORE, PR_SCHED_CORE_SHARE_FROM, from,
+				SCHED_CORE_SCOPE_PID, 0);
+	if (prctl_errno) {
+		error(prctl_errno, -prctl_errno,
+		      "Failed to pull cookie from PID %d", from);
+	}
+}
+
+void core_sched_push_cookie(pid_t to, core_sched_type_t type)
+{
+	int prctl_errno =
+		prctl(PR_SCHED_CORE, PR_SCHED_CORE_SHARE_TO, to, type, 0);
+	if (prctl_errno) {
+		error(prctl_errno, -prctl_errno,
+		      "Failed to push cookie to PID %d", to);
+	}
+}
+
+void core_sched_copy_cookie(struct args *args)
+{
+	pid_t pid = fork();
+	if (pid == -1) {
+		error(pid, errno, "Failed to spawn cookie eating child");
+	}
+
+	// The child pulls the cookie from the source, and then pushes the
+	// cookie to the destination.
+	if (!pid) {
+		core_sched_pull_cookie(args->from_pid);
+		core_sched_push_cookie(args->to_pid, args->type);
+	} else {
+		int status = 0;
+		waitpid(pid, &status, 0);
+		if (status) {
+			error(status, status,
+			      "Failed to copy cookie from %d to %d",
+			      args->from_pid, args->to_pid);
+		}
+	}
+}
+
+bool verify_arguments(struct args *args, char **error_msg)
 {
 	*error_msg = malloc(128);
 	if (!*error_msg) {
-		perror("Failed to allocate error message");
-		exit(1);
+		error(-1, errno, "Failed to allocate error message");
 	}
 
 	if (args->from_pid != 0) {
@@ -165,7 +207,7 @@ error_t parse_opt(int key, char *arg, struct argp_state *state)
 			argp_usage(state);
 		}
 		char *error_msg = NULL;
-		if (!verify_arguments(state, arguments, &error_msg)) {
+		if (!verify_arguments(arguments, &error_msg)) {
 			assert(error_msg != NULL);
 			argp_error(state, "%s", error_msg);
 		}
@@ -193,6 +235,9 @@ int main(int argc, char *argv[argc])
 		break;
 	case SCHED_CORE_CMD_CREATE:
 		core_sched_create_cookie(&arguments);
+		break;
+	case SCHED_CORE_CMD_COPY:
+		core_sched_copy_cookie(&arguments);
 		break;
 	default:
 		exit(1);
