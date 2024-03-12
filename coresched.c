@@ -11,9 +11,10 @@
 #include <unistd.h>
 #include <error.h>
 
-static char args_doc[] = "get -p [PID]\n"
-			 "create -p [PID]\n"
-			 "copy -p [PID] -d [PID]";
+static char args_doc[] = "get -p PID\n"
+			 "create -p PID\n"
+			 "copy -p PID -d PID [-t PID]\n"
+			 "exec [-p PID] -- PROGRAM ARGS...";
 
 static char doc[] = "Manage core scheduling cookies for tasks";
 
@@ -39,6 +40,7 @@ typedef enum {
 	SCHED_CORE_CMD_GET,
 	SCHED_CORE_CMD_CREATE,
 	SCHED_CORE_CMD_COPY,
+	SCHED_CORE_CMD_EXEC,
 } core_sched_cmd_t;
 
 struct args {
@@ -46,6 +48,7 @@ struct args {
 	pid_t to_pid;
 	core_sched_type_t type;
 	core_sched_cmd_t cmd;
+	int exec_argv_offset;
 };
 
 unsigned long core_sched_get_cookie(struct args *args)
@@ -113,6 +116,43 @@ void core_sched_copy_cookie(struct args *args)
 	}
 }
 
+void core_sched_exec_with_cookie(struct args *args, char **argv)
+{
+	if (!args->exec_argv_offset) {
+		fprintf(stderr,
+			"exec has to be followed by a program name to be executed. See '--help' for more info.\n");
+		exit(1);
+	}
+
+	// Move the argument list to the first argument of the program
+	argv = &argv[args->exec_argv_offset];
+
+	pid_t pid = fork();
+	if (pid == -1) {
+		error(pid, errno, "Failed to spawn cookie eating child");
+	}
+
+	if (!pid) {
+		// If a source PID is provided, try to copy the cookie from that PID.
+		// Otherwise, create a brand new cookie with the provided type.
+		if (args->from_pid) {
+			core_sched_pull_cookie(args->from_pid);
+		} else {
+			args->from_pid = getpid();
+			core_sched_create_cookie(args);
+		}
+		unsigned long cookie = core_sched_get_cookie(args);
+		fprintf(stderr,
+			"spawned pid %d with core scheduling cookie 0x%lx\n",
+			getpid(), cookie);
+		if (execvp(argv[0], argv)) {
+			error(-1, errno, "Failed to spawn process");
+		}
+	} else {
+		exit(0);
+	}
+}
+
 bool verify_arguments(struct args *args, char **error_msg)
 {
 	*error_msg = malloc(128);
@@ -120,7 +160,7 @@ bool verify_arguments(struct args *args, char **error_msg)
 		error(-1, errno, "Failed to allocate error message");
 	}
 
-	if (args->from_pid != 0) {
+	if (args->from_pid != 0 || args->cmd == SCHED_CORE_CMD_EXEC) {
 		if (args->cmd == SCHED_CORE_CMD_COPY && args->to_pid == 0) {
 			char *msg =
 				"Copying a core scheduling cookie requires a destination PID\0";
@@ -179,6 +219,8 @@ core_sched_cmd_t parse_cmd(struct argp_state *state, char *arg)
 		return SCHED_CORE_CMD_CREATE;
 	} else if (!strncmp(arg, "copy\0", 5)) {
 		return SCHED_CORE_CMD_COPY;
+	} else if (!strncmp(arg, "exec\0", 5)) {
+		return SCHED_CORE_CMD_EXEC;
 	} else {
 		argp_error(state, "Unknown command '%s'", arg);
 		__builtin_unreachable();
@@ -191,7 +233,12 @@ error_t parse_opt(int key, char *arg, struct argp_state *state)
 
 	switch (key) {
 	case ARGP_KEY_ARG:
-		arguments->cmd = parse_cmd(state, arg);
+		if (!state->quoted) {
+			arguments->cmd = parse_cmd(state, arg);
+		} else {
+			assert(state->quoted < state->argc);
+			arguments->exec_argv_offset = state->quoted;
+		}
 		break;
 	case 'p':
 		arguments->from_pid = parse_pid(state, arg);
@@ -225,19 +272,29 @@ int main(int argc, char *argv[argc])
 
 	struct argp argp = { options, parse_opt, args_doc, doc, 0, 0, 0 };
 
-	argp_parse(&argp, argc, argv, 0, 0, &arguments);
+	argp_parse(&argp, argc, argv, ARGP_IN_ORDER, 0, &arguments);
 
 	unsigned long cookie = 0;
 	switch (arguments.cmd) {
 	case SCHED_CORE_CMD_GET:
 		cookie = core_sched_get_cookie(&arguments);
-		printf("%ld\n", cookie);
+		if (cookie) {
+			printf("core scheduling cookie of pid %d is 0x%lx\n",
+			       arguments.from_pid, cookie);
+		} else {
+			printf("pid %d doesn't have a core scheduling cookie\n",
+			       arguments.from_pid);
+			exit(1);
+		}
 		break;
 	case SCHED_CORE_CMD_CREATE:
 		core_sched_create_cookie(&arguments);
 		break;
 	case SCHED_CORE_CMD_COPY:
 		core_sched_copy_cookie(&arguments);
+		break;
+	case SCHED_CORE_CMD_EXEC:
+		core_sched_exec_with_cookie(&arguments, argv);
 		break;
 	default:
 		exit(1);
