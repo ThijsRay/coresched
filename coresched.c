@@ -149,7 +149,9 @@ void core_sched_exec_with_cookie(struct args *args, char **argv)
 			error(-1, errno, "Failed to spawn process");
 		}
 	} else {
-		exit(0);
+		int status = 0;
+		waitpid(pid, &status, 0);
+		exit(status);
 	}
 }
 
