@@ -11,6 +11,10 @@ install: coresched
 	install -m 755 $< -D "$(PREFIX)/bin/"
 	setcap CAP_SYS_PTRACE+ep "$(PREFIX)/bin/$<"
 
+.PHONY: uninstall
+uninstall:
+	$(RM) "$(PREFIX)/bin/coresched"
+
 
 .PHONY: clean
 clean:
