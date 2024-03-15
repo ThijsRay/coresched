@@ -9,7 +9,7 @@ endif
 .PHONY: install
 install: coresched
 	install -m 755 $< -D "$(PREFIX)/bin/"
-	setcap CAP_SYS_PTRACE+ep $<
+	setcap CAP_SYS_PTRACE+ep "$(PREFIX)/bin/$<"
 
 
 .PHONY: clean
