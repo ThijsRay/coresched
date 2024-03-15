@@ -25,7 +25,7 @@ static struct argp_option options[7] = {
 	{ "dest", 'd', "PID", 0,
 	  "the PID to copy the core scheduling cookie to", 0 },
 	{ "type", 't', "TYPE", 0,
-	  "the type of the destination PID, or the type of the PID to create a core scheduling cookie for. Can be one of the following: pid, tgid or pgid. Defaults to pgid.",
+	  "the type of the destination PID, or the type of the PID to create a core scheduling cookie for. Can be one of the following: pid, tgid or pgid. Defaults to tgid.",
 	  0 },
 	{ 0 }
 };
@@ -246,7 +246,7 @@ error_t parse_opt(int key, char *arg, struct argp_state *state)
 int main(int argc, char *argv[argc])
 {
 	struct args arguments = { 0 };
-	arguments.type = SCHED_CORE_SCOPE_PGID;
+	arguments.type = SCHED_CORE_SCOPE_TGID;
 
 	struct argp argp = { options, parse_opt, args_doc, doc, 0, 0, 0 };
 
