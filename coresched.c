@@ -153,27 +153,20 @@ void core_sched_exec_with_cookie(struct args *args, char **argv)
 	}
 }
 
-bool verify_arguments(struct args *args, char **error_msg)
+static const char *copying_requires_dest_msg =
+	"Copying a core scheduling cookie requires a destination PID\0";
+static const char *retrieve_requires_source_msg =
+	"Retrieving a core scheduling cookie requires a source PID\0";
+bool verify_arguments(struct args *args, const char **error_msg)
 {
-	*error_msg = malloc(128);
-	if (!*error_msg) {
-		error(-1, errno, "Failed to allocate error message");
-	}
-
 	if (args->from_pid != 0 || args->cmd == SCHED_CORE_CMD_EXEC) {
 		if (args->cmd == SCHED_CORE_CMD_COPY && args->to_pid == 0) {
-			char *msg =
-				"Copying a core scheduling cookie requires a destination PID\0";
-			const size_t msg_len = strlen(msg);
-			memcpy(*error_msg, msg, msg_len);
+			*error_msg = copying_requires_dest_msg;
 			return false;
 		}
 		return true;
 	}
-	char *msg =
-		"Retrieving a core scheduling cookie requires a source PID\0";
-	const size_t msg_len = strlen(msg);
-	memcpy(*error_msg, msg, msg_len);
+	*error_msg = retrieve_requires_source_msg;
 	return false;
 }
 
@@ -253,7 +246,7 @@ error_t parse_opt(int key, char *arg, struct argp_state *state)
 		if (state->argc <= 1) {
 			argp_usage(state);
 		}
-		char *error_msg = NULL;
+		const char *error_msg = NULL;
 		if (!verify_arguments(arguments, &error_msg)) {
 			assert(error_msg != NULL);
 			argp_error(state, "%s", error_msg);
