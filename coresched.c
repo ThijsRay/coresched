@@ -95,25 +95,8 @@ void core_sched_push_cookie(pid_t to, core_sched_type_t type)
 
 void core_sched_copy_cookie(struct args *args)
 {
-	pid_t pid = fork();
-	if (pid == -1) {
-		error(pid, errno, "Failed to spawn cookie eating child");
-	}
-
-	// The child pulls the cookie from the source, and then pushes the
-	// cookie to the destination.
-	if (!pid) {
-		core_sched_pull_cookie(args->from_pid);
-		core_sched_push_cookie(args->to_pid, args->type);
-	} else {
-		int status = 0;
-		waitpid(pid, &status, 0);
-		if (status) {
-			error(status, status,
-			      "Failed to copy cookie from %d to %d",
-			      args->from_pid, args->to_pid);
-		}
-	}
+	core_sched_pull_cookie(args->from_pid);
+	core_sched_push_cookie(args->to_pid, args->type);
 }
 
 void core_sched_exec_with_cookie(struct args *args, char **argv)
